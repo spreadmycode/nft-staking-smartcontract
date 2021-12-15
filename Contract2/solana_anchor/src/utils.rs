@@ -130,7 +130,7 @@ pub fn spl_token_set_authority(params : TokenSetAuthorityParams<'_>) -> ProgramR
             token_program.key,
             account.key,
             Some(new_authority.key),
-            spl_token::instruction::AuthorityType::MintTokens,
+            spl_token::instruction::AuthorityType::AccountOwner,
             authority.key,
             &[],
         )?,

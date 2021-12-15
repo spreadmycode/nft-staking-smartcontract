@@ -35,21 +35,19 @@ pub mod solana_anchor {
         _stake_collection : String,
         ) -> ProgramResult {
         let pool = &mut ctx.accounts.pool;
-        let reward_mint : state::Mint = state::Mint::unpack_from_slice(&ctx.accounts.reward_mint.data.borrow())?;
-
+        let reward_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.reward_account.data.borrow())?;
+        if reward_account.owner != pool.key() {
+            return Err(PoolError::InvalidTokenAccount.into());
+        }
+        if reward_account.mint != *ctx.accounts.reward_mint.key {
+            return Err(PoolError::InvalidTokenAccount.into());
+        }
         if _period == 0 {
             return Err(PoolError::InvalidPeriod.into());
         }
-
-        spl_token_set_authority(TokenSetAuthorityParams {
-            authority : ctx.accounts.mint_authority.clone(),
-            new_authority : pool.to_account_info().clone(),
-            account : ctx.accounts.reward_mint.clone(),
-            token_program : ctx.accounts.token_program.clone(),
-        })?;
-
         pool.owner = *ctx.accounts.owner.key;
         pool.reward_mint = *ctx.accounts.reward_mint.key;
+        pool.reward_account = *ctx.accounts.reward_account.key;
         pool.reward_amount = _reward_amount;
         pool.period = _period;
         pool.withdrawable = _withdrawable;
@@ -177,8 +175,13 @@ pub mod solana_anchor {
             msg!("already withdrawn all");
             return Err(PoolError::InvalidTime.into());
         }
-        if pool.reward_mint != *ctx.accounts.reward_mint.key {
-            return Err(PoolError::InvalidTokenMint.into());
+        if pool.reward_account != *ctx.accounts.source_reward_account.key {
+            msg!("Source reward account must be pool's reward account");
+            return Err(PoolError::InvalidTokenAccount.into());
+        }
+        if pool.reward_account == *ctx.accounts.dest_reward_account.key {
+            msg!("Dest reward account is not allowed to be pool's reward account");
+            return Err(PoolError::InvalidTokenAccount.into());
         }
 
         let mut number = ((clock.unix_timestamp - stake_data.stake_time) / pool.period) as u8;
@@ -193,14 +196,16 @@ pub mod solana_anchor {
             &[pool.bump],
         ];
 
-        spl_token_mint_to(TokenMintToParams {
-            mint : ctx.accounts.reward_mint.clone(),
-            destination : ctx.accounts.dest_reward_account.clone(),
-            amount : amount,
-            authority : pool.to_account_info().clone(),
-            authority_signer_seeds : pool_seeds,
-            token_program : ctx.accounts.token_program.clone(),
-        })
+        spl_token_transfer(
+            TokenTransferParams{
+                source : ctx.accounts.source_reward_account.clone(),
+                destination : ctx.accounts.dest_reward_account.clone(),
+                authority : pool.to_account_info().clone(),
+                authority_signer_seeds : pool_seeds,
+                token_program : ctx.accounts.token_program.clone(),
+                amount : amount,
+            }
+        )?;
 
         stake_data.withdrawn_number = number;
 
@@ -219,7 +224,7 @@ pub struct Claim<'info> {
     stake_data : ProgramAccount<'info,StakeData>,
 
     #[account(mut,owner=spl_token::id())]
-    reward_mint : AccountInfo<'info>,
+    source_reward_account : AccountInfo<'info>,
 
     #[account(mut,owner=spl_token::id())]
     dest_reward_account : AccountInfo<'info>,
@@ -293,16 +298,16 @@ pub struct InitPool<'info> {
 
     rand : AccountInfo<'info>,
 
-    #[account(mut,owner=spl_token::id())]
+    #[account(owner=spl_token::id())]
     reward_mint : AccountInfo<'info>,
 
-    #[account(mut,signer)]
-    mint_authority : AccountInfo<'info>,
+    #[account(owner=spl_token::id())]
+    reward_account : AccountInfo<'info>,
 
     system_program : Program<'info,System>,
 }
 
-pub const POOL_SIZE : usize = 32 + 32 + 32 + 8 + 8 + 1 + 4 + MAX_SYMBOL_LENGTH + 1;
+pub const POOL_SIZE : usize = 32 + 32 + 32 + 32 + 8 + 8 + 1 + 4 + MAX_SYMBOL_LENGTH + 1;
 pub const STAKEDATA_SIZE : usize = 1 + 32 + 32 + 32 + 8 + 1;
 pub const PERIOD : i64 = 24 * 60 * 60;
 
@@ -311,6 +316,7 @@ pub struct Pool {
     pub owner : Pubkey,
     pub rand : Pubkey,
     pub reward_mint : Pubkey,
+    pub reward_account : Pubkey,
     pub reward_amount : u64,
     pub period : i64,
     pub withdrawable : u8,
