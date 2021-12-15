@@ -35,7 +35,6 @@ pub mod solana_anchor {
         _stake_collection : String,
         ) -> ProgramResult {
         let pool = &mut ctx.accounts.pool;
-        let reward_mint : state::Mint = state::Mint::unpack_from_slice(&ctx.accounts.reward_mint.data.borrow())?;
 
         if _period == 0 {
             return Err(PoolError::InvalidPeriod.into());
@@ -200,7 +199,7 @@ pub mod solana_anchor {
             authority : pool.to_account_info().clone(),
             authority_signer_seeds : pool_seeds,
             token_program : ctx.accounts.token_program.clone(),
-        })
+        })?;
 
         stake_data.withdrawn_number = number;
 
@@ -298,6 +297,9 @@ pub struct InitPool<'info> {
 
     #[account(mut,signer)]
     mint_authority : AccountInfo<'info>,
+
+    #[account(address=spl_token::id())]
+    token_program : AccountInfo<'info>,
 
     system_program : Program<'info,System>,
 }
