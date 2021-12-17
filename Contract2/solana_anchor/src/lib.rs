@@ -77,7 +77,7 @@ pub mod solana_anchor {
             msg!("Source nft account's owner is not allowed to be Pool");
             return Err(PoolError::InvalidTokenAccount.into());
         }
-        if source_nft_account.mint == *ctx.accounts.nft_mint.key {
+        if source_nft_account.mint != *ctx.accounts.nft_mint.key {
             msg!("Not match mint address");
             return Err(PoolError::InvalidTokenAccount.into());
         }
@@ -85,7 +85,7 @@ pub mod solana_anchor {
             msg!("Destination nft account's owner must be Pool");
             return Err(PoolError::InvalidTokenAccount.into());
         }
-        if metadata.data.symbol != pool.stake_collection {
+        if (&metadata.data.symbol).eq(&pool.stake_collection) {
             msg!("Not match collection symbol");
             return Err(PoolError::InvalidMetadata.into());
         }
