@@ -34,6 +34,7 @@ pub mod solana_anchor {
         _withdrawable : u8,
         _stake_collection : String,
         ) -> ProgramResult {
+        msg!("Init Pool");
         let pool = &mut ctx.accounts.pool;
         let reward_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.reward_account.data.borrow())?;
         if reward_account.owner != pool.key() {
@@ -59,13 +60,14 @@ pub mod solana_anchor {
     pub fn stake(
         ctx : Context<Stake>,
         ) -> ProgramResult {
+        msg!("Stake");
         let pool = &ctx.accounts.pool;
         let clock = Clock::from_account_info(&ctx.accounts.clock)?;
         let source_nft_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.source_nft_account.data.borrow())?;
         let dest_nft_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.dest_nft_account.data.borrow())?;
         let nft_mint : state::Mint = state::Mint::unpack_from_slice(&ctx.accounts.nft_mint.data.borrow())?;
         let metadata : metaplex_token_metadata::state::Metadata =  metaplex_token_metadata::state::Metadata::from_account_info(&ctx.accounts.metadata)?;
-        if nft_mint.decimals != 0 && nft_mint.supply == 1 {
+        if nft_mint.decimals != 0 && nft_mint.supply != 1 {
             msg!("This mint is not proper nft");
             return Err(PoolError::InvalidTokenMint.into());
         }
@@ -90,16 +92,16 @@ pub mod solana_anchor {
             return Err(PoolError::InvalidMetadata.into());
         }
 
-        spl_token_transfer(
-            TokenTransferParams{
+        spl_token_transfer_without_seed(
+            TokenTransferParamsWithoutSeed{
                 source : ctx.accounts.source_nft_account.clone(),
                 destination : ctx.accounts.dest_nft_account.clone(),
                 authority : ctx.accounts.owner.clone(),
-                authority_signer_seeds : &[],
                 token_program : ctx.accounts.token_program.clone(),
                 amount : 1,
             }
         )?;
+
 
         let stake_data = &mut ctx.accounts.stake_data;
         stake_data.owner = *ctx.accounts.owner.key;
@@ -114,6 +116,7 @@ pub mod solana_anchor {
     pub fn unstake(
         ctx : Context<Unstake>
         ) -> ProgramResult {
+        msg!("Unstake");
         let pool = &ctx.accounts.pool;
         let stake_data = &mut ctx.accounts.stake_data;
         let clock = Clock::from_account_info(&ctx.accounts.clock)?;
@@ -267,7 +270,7 @@ pub struct Stake<'info> {
     #[account(init, payer=owner, space=8+STAKEDATA_SIZE)]
     stake_data : ProgramAccount<'info,StakeData>,
 
-    #[account(owner=spl_token::id())]
+    #[account(mut,owner=spl_token::id())]
     nft_mint : AccountInfo<'info>,
 
     #[account(mut)]

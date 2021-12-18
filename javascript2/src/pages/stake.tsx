@@ -2,7 +2,7 @@ import { Fragment, useRef, useState, useEffect } from 'react';
 import useNotify from './notify'
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import * as anchor from "@project-serum/anchor";
-import {MintLayout,TOKEN_PROGRAM_ID,Token,ASSOCIATED_TOKEN_PROGRAM_ID} from "@solana/spl-token";
+import {AccountLayout,MintLayout,TOKEN_PROGRAM_ID,Token,ASSOCIATED_TOKEN_PROGRAM_ID} from "@solana/spl-token";
 import { programs } from '@metaplex/js'
 import {
   Connection,
@@ -40,8 +40,8 @@ const confirmOption : ConfirmOptions = {
 }
 
 const REWARD_TOKEN = 'C5XF7wCq62CW1cDEha38yv3h5jxEVyCDJWmnYKGrBk9q'
-let POOL = new PublicKey('8jJLo83gFvjMtZa9z2qfZLaCL4kAH2VyTTt6hz67QwHf')
-
+let POOL = new PublicKey('FMxXX5hVg7gXY3t5sBnCtDc5z4cfqwKQhPT2fhhpwicC')
+const STAKEDATA_SIZE = 8 + 1 + 32 + 32 + 32 +8 + 1;
 const createAssociatedTokenAccountInstruction = (
   associatedTokenAddress: anchor.web3.PublicKey,
   payer: anchor.web3.PublicKey,
@@ -115,49 +115,6 @@ const getTokenWallet = async (
   )[0];
 };
 
-export async function getNftsForOwner(
-  conn : any,
-  owner : PublicKey
-  ){
-  console.log("+ getNftsForOwner")
-  const allTokens: any = []
-  const tokenAccounts = await conn.getParsedTokenAccountsByOwner(owner, {
-    programId: TOKEN_PROGRAM_ID
-  });
-
-  for (let index = 0; index < tokenAccounts.value.length; index++) {
-    try{
-      const tokenAccount = tokenAccounts.value[index];
-      const tokenAmount = tokenAccount.account.data.parsed.info.tokenAmount;
-
-      if (tokenAmount.amount == "1" && tokenAmount.decimals == "0") {
-        let nftMint = new PublicKey(tokenAccount.account.data.parsed.info.mint)
-        let [pda] = await anchor.web3.PublicKey.findProgramAddress([
-          Buffer.from("metadata"),
-          TOKEN_METADATA_PROGRAM_ID.toBuffer(),
-          nftMint.toBuffer(),
-        ], TOKEN_METADATA_PROGRAM_ID);
-        const accountInfo: any = await conn.getParsedAccountInfo(pda);
-        let metadata : any = new Metadata(owner.toString(), accountInfo.value);
-        const { data }: any = await axios.get(metadata.data.data.uri)
-        if (metadata.data.data.symbol == COLLECTION_NAME) {
-          const entireData = { ...data, id: Number(data.name.replace( /^\D+/g, '').split(' - ')[0]) }
-          allTokens.push({address : nftMint, ...entireData })
-          console.log(data)
-        }
-      }
-      allTokens.sort(function (a: any, b: any) {
-        if (a.name < b.name) { return -1; }
-        if (a.name > b.name) { return 1; }
-        return 0;
-      })
-    } catch(err) {
-      continue;
-    }
-  }
-  return allTokens
-}
-
 async function sendTransaction(transaction : Transaction,signers : Keypair[]) {
   try{
     transaction.feePayer = wallet.publicKey
@@ -229,7 +186,7 @@ async function stake(
   let transaction = new Transaction()
   let signers : Keypair[] = []
   signers.push(stakeData)
-  // if((await conn.getAccountInfo(destNftAccount)) == null)
+  if((await conn.getAccountInfo(destNftAccount)) == null)
   	transaction.add(createAssociatedTokenAccountInstruction(destNftAccount,wallet.publicKey,POOL,nftMint))
   transaction.add(
   	await program.instruction.stake({
@@ -250,6 +207,82 @@ async function stake(
   await sendTransaction(transaction,signers)
 }
 
+async function getNftsForOwner(
+  conn : any,
+  owner : PublicKey
+  ){
+  console.log("+ getNftsForOwner")
+  const allTokens: any = []
+  const tokenAccounts = await conn.getParsedTokenAccountsByOwner(owner, {
+    programId: TOKEN_PROGRAM_ID
+  });
+
+  for (let index = 0; index < tokenAccounts.value.length; index++) {
+    try{
+      const tokenAccount = tokenAccounts.value[index];
+      const tokenAmount = tokenAccount.account.data.parsed.info.tokenAmount;
+
+      if (tokenAmount.amount == "1" && tokenAmount.decimals == "0") {
+        let nftMint = new PublicKey(tokenAccount.account.data.parsed.info.mint)
+        let [pda] = await anchor.web3.PublicKey.findProgramAddress([
+          Buffer.from("metadata"),
+          TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+          nftMint.toBuffer(),
+        ], TOKEN_METADATA_PROGRAM_ID);
+        const accountInfo: any = await conn.getParsedAccountInfo(pda);
+        let metadata : any = new Metadata(owner.toString(), accountInfo.value);
+        const { data }: any = await axios.get(metadata.data.data.uri)
+        if (metadata.data.data.symbol == COLLECTION_NAME) {
+          const entireData = { ...data, id: Number(data.name.replace( /^\D+/g, '').split(' - ')[0]) }
+          allTokens.push({address : nftMint, ...entireData })
+          console.log(data)
+        }
+      }
+      allTokens.sort(function (a: any, b: any) {
+        if (a.name < b.name) { return -1; }
+        if (a.name > b.name) { return 1; }
+        return 0;
+      })
+    } catch(err) {
+      continue;
+    }
+  }
+  return allTokens
+}
+
+async function getStakedNftsForOwner(
+  conn : Connection,
+  owner : PublicKey,
+  ){
+  console.log("+ getStakedNftsForOwner")
+  const wallet = new anchor.Wallet(Keypair.generate());
+  const provider = new anchor.Provider(conn, wallet, anchor.Provider.defaultOptions());
+  const program = new anchor.Program(idl, programId, provider);
+  const allTokens: any = []
+  let resp = await conn.getProgramAccounts(programId,{
+    dataSlice: {length: 0, offset: 0},
+    filters: [{dataSize: STAKEDATA_SIZE},{memcmp:{offset:9,bytes:owner.toBase58()}},{memcmp:{offset:41,bytes:POOL.toBase58()}}]
+  })
+  for(let nftAccount of resp){
+    let stakedNft = await program.account.stakeData.fetch(nftAccount.pubkey)
+    if(stakedNft.unstaked) continue;
+    let account = await conn.getAccountInfo(stakedNft.account)
+    let mint = new PublicKey(AccountLayout.decode(account!.data).mint)
+    let pda= await getMetadata(mint)
+    const accountInfo: any = await conn.getParsedAccountInfo(pda);
+    let metadata : any = new Metadata(owner.toString(), accountInfo.value);
+    const { data }: any = await axios.get(metadata.data.data.uri)
+    const entireData = { ...data, id: Number(data.name.replace( /^\D+/g, '').split(' - ')[0])}
+    allTokens.push({
+      withdrawnNumber : stakedNft.withdrawnNumber,
+      stakeTime : stakedNft.stakeTime.toNumber(),
+      address : mint,
+      ...entireData,
+    })
+  }
+  return allTokens
+}
+
 async function getPoolData(
 	){
 	let wallet = new anchor.Wallet(Keypair.generate())
@@ -268,11 +301,15 @@ async function getPoolData(
 }
 
 let nfts : any[] = []
+let stakedNfts : any[] = []
 
 async function getNfts(callback : any){
 	nfts.splice(0,nfts.length)
+  stakedNfts.splice(0,stakedNfts.length)
 	nfts = await getNftsForOwner(conn,wallet.publicKey)
+  stakedNfts = await getStakedNftsForOwner(conn,wallet.publicKey)
 	console.log(nfts)
+  console.log(stakedNfts)
 	if(callback != null) callback();
 }
 
@@ -356,6 +393,7 @@ export default function Stake(){
 		<hr/>
 		<div className="row">
 			<div className="col-lg-6">
+        <h4>Your Wallet NFT</h4>
 				<div className="row">
 				{
 					nfts.map((nft,idx)=>{
@@ -372,6 +410,21 @@ export default function Stake(){
 				}
 				</div>
 			</div>
+      <div className="col-lg-6">
+        <h4>Your Staked NFT</h4>
+        <div className="row">
+        {
+          stakedNfts.map((nft,idx)=>{
+            return <div className="card m-3" key={idx} style={{"width" : "250px"}}>
+              <img className="card-img-top" src={nft.image} alt="Image Error"/>
+              <div className="card-img-overlay">
+                <h4>{nft.name}</h4>
+              </div>
+            </div>
+          })
+        }
+        </div>
+      </div>
 		</div>
 	</div>
 }
