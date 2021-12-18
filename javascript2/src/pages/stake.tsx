@@ -4,6 +4,7 @@ import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import * as anchor from "@project-serum/anchor";
 import {AccountLayout,MintLayout,TOKEN_PROGRAM_ID,Token,ASSOCIATED_TOKEN_PROGRAM_ID} from "@solana/spl-token";
 import { programs } from '@metaplex/js'
+import moment from 'moment';
 import {
   Connection,
   Keypair,
@@ -40,7 +41,7 @@ const confirmOption : ConfirmOptions = {
 }
 
 const REWARD_TOKEN = 'C5XF7wCq62CW1cDEha38yv3h5jxEVyCDJWmnYKGrBk9q'
-let POOL = new PublicKey('FMxXX5hVg7gXY3t5sBnCtDc5z4cfqwKQhPT2fhhpwicC')
+let POOL = new PublicKey('DJFzss2o2c7STHqeELp2ay8vWPo2XWv3MvWP6ogHLavm')
 const STAKEDATA_SIZE = 8 + 1 + 32 + 32 + 32 +8 + 1;
 const createAssociatedTokenAccountInstruction = (
   associatedTokenAddress: anchor.web3.PublicKey,
@@ -207,6 +208,69 @@ async function stake(
   await sendTransaction(transaction,signers)
 }
 
+async function unstake(
+  stakeData : PublicKey
+  ){
+  console.log("+ unstake")
+  let provider = new anchor.Provider(conn, wallet as any, confirmOption)
+  let program = new anchor.Program(idl,programId,provider)
+  let stakedNft = await program.account.stakeData.fetch(stakeData)
+  let account = await conn.getAccountInfo(stakedNft.account)
+  let mint = new PublicKey(AccountLayout.decode(account!.data).mint)
+  const destNftAccount = await getTokenWallet(wallet.publicKey,mint)
+  let transaction = new Transaction()
+
+  transaction.add(
+    await program.instruction.unstake({
+      accounts:{
+        owner : wallet.publicKey,
+        pool : POOL,
+        stakeData : stakeData,
+        sourceNftAccount : stakedNft.account,
+        destNftAccount : destNftAccount,
+        tokenProgram : TOKEN_PROGRAM_ID,
+        clock : SYSVAR_CLOCK_PUBKEY
+      }
+    })
+  )
+  await sendTransaction(transaction,[])
+}
+
+async function claim(
+  ){
+  console.log("+ claim")
+  let provider = new anchor.Provider(conn, wallet as any, confirmOption)
+  let program = new anchor.Program(idl,programId,provider)  
+  let resp = await conn.getProgramAccounts(programId,{
+    dataSlice: {length: 0, offset: 0},
+    filters: [{dataSize: STAKEDATA_SIZE},{memcmp:{offset:9,bytes:wallet.publicKey!.toBase58()}},{memcmp:{offset:41,bytes:POOL.toBase58()}}]
+  })
+  await getPoolData(null)
+  let destRewardAccount = await getTokenWallet(wallet.publicKey,pD.rewardMint)
+  let transaction = new Transaction()
+  if((await conn.getAccountInfo(destRewardAccount)) == null)
+    transaction.add(createAssociatedTokenAccountInstruction(destRewardAccount,wallet.publicKey,wallet.publicKey,pD.rewardMint))  
+  for(let stakeAccount of resp){
+    let stakedNft = await program.account.stakeData.fetch(stakeAccount.pubkey)
+    let num = (moment().unix() - stakedNft.stakeTime.toNumber()) / pD.period
+    if(num > pD.withdrawable) num = pD.withdrawable
+    transaction.add(
+      await program.instruction.claim({
+        accounts:{
+          owner : wallet.publicKey,
+          pool : POOL,
+          stakeData : stakeAccount.pubkey,
+          sourceRewardAccount : pD.rewardAccount,
+          destRewardAccount : destRewardAccount,
+          tokenProgram : TOKEN_PROGRAM_ID,
+          clock : SYSVAR_CLOCK_PUBKEY,
+        }
+      })
+    )
+  }
+  await sendTransaction(transaction,[])
+}
+
 async function getNftsForOwner(
   conn : any,
   owner : PublicKey
@@ -276,6 +340,7 @@ async function getStakedNftsForOwner(
     allTokens.push({
       withdrawnNumber : stakedNft.withdrawnNumber,
       stakeTime : stakedNft.stakeTime.toNumber(),
+      stakeData : nftAccount.pubkey,
       address : mint,
       ...entireData,
     })
@@ -283,21 +348,58 @@ async function getStakedNftsForOwner(
   return allTokens
 }
 
+let pD : any ;
 async function getPoolData(
+  callback : any
 	){
 	let wallet = new anchor.Wallet(Keypair.generate())
 	let provider = new anchor.Provider(conn,wallet,confirmOption)
 	const program = new anchor.Program(idl,programId,provider)
 	let poolData = await program.account.pool.fetch(POOL)
 	let data = ''
-	data += "Reward Mint : " + poolData.rewardMint.toBase58() + "\n";
-	data += "Reward Account : " + poolData.rewardAccount.toBase58() + "\n";
-	// console.log(poolData.rewardAccount.toBase58())
-	data += "Reward Amount : " + poolData.rewardAmount.toNumber() + "\n";
-	data += "Period : " + poolData.rewardAmount.toNumber() + "s\n";
-	data += "Withdrawable Number : " + poolData.withdrawable + "\n";
-	data += "Collection Name : " + poolData.stakeCollection + "\n";
-	alert(data)
+	// data += "Reward Mint : " + poolData.rewardMint.toBase58() + "\n";
+	// data += "Reward Account : " + poolData.rewardAccount.toBase58() + "\n";
+	// // console.log(poolData.rewardAccount.toBase58())
+	// data += "Reward Amount : " + poolData.rewardAmount.toNumber() + "\n";
+	// data += "Period : " + poolData.period.toNumber() + "s\n";
+	// data += "Withdrawable Number : " + poolData.withdrawable + "\n";
+	// data += "Collection Name : " + poolData.stakeCollection + "\n";
+	// alert(data)
+  pD = {
+    rewardMint : poolData.rewardMint,
+    rewardAccount : poolData.rewardAccount,
+    rewardAmount : poolData.rewardAmount.toNumber(),
+    period : poolData.period.toNumber(),
+    withdrawable : poolData.withdrawable,
+    stakeCollection : poolData.stakeCollection
+  }
+  if(callback != null) callback();
+}
+
+let claimAmount = 0
+async function getClaimAmount(
+  conn : Connection,
+  owner : PublicKey
+  ){
+  console.log("+ getClaimAmount")
+  const wallet = new anchor.Wallet(Keypair.generate());
+  const provider = new anchor.Provider(conn, wallet, anchor.Provider.defaultOptions());
+  const program = new anchor.Program(idl, programId, provider);
+  let resp = await conn.getProgramAccounts(programId,{
+    dataSlice: {length: 0, offset: 0},
+    filters: [{dataSize: STAKEDATA_SIZE},{memcmp:{offset:9,bytes:owner.toBase58()}},{memcmp:{offset:41,bytes:POOL.toBase58()}}]
+  })
+  claimAmount = 0
+  await getPoolData(null)
+
+  for(let stakeAccount of resp){
+    let stakedNft = await program.account.stakeData.fetch(stakeAccount.pubkey)
+    let num = (moment().unix() - stakedNft.stakeTime.toNumber()) / pD.period
+    if(num > pD.withdrawable) num = pD.withdrawable
+    claimAmount += pD.rewardAmount * (num - stakedNft.withdrawnNumber)
+  }
+
+  console.log(claimAmount)
 }
 
 let nfts : any[] = []
@@ -306,6 +408,7 @@ let stakedNfts : any[] = []
 async function getNfts(callback : any){
 	nfts.splice(0,nfts.length)
   stakedNfts.splice(0,stakedNfts.length)
+  await getPoolData(null)
 	nfts = await getNftsForOwner(conn,wallet.publicKey)
   stakedNfts = await getStakedNftsForOwner(conn,wallet.publicKey)
 	console.log(nfts)
@@ -380,10 +483,10 @@ export default function Stake(){
 					render()
 				}}>Create Staking Pool</button>
 				<button type="button" className="btn btn-warning m-1" onClick={async () =>{
-					await getPoolData()
+					await getPoolData(render)
 				}}>Get Pool Data</button>
 				<button type="button" className="btn btn-warning m-1" onClick={async () =>{
-					render()
+          await getNfts(render)
 				}}>Redirect</button>
 			</div>
 			<div className="col-lg-4">
@@ -391,6 +494,33 @@ export default function Stake(){
 			</div>
 		</div>
 		<hr/>
+    <div className="row">
+      <div className="col-lg-6">
+        <h5>{claimAmount}</h5>
+        <button type="button" className="btn btn-warning m-1" onClick={async () =>{
+          await getClaimAmount(conn,wallet.publicKey)
+          render()
+        }}>Get Claim Amount</button>
+        <button type="button" className="btn btn-warning m-1" onClick={async () =>{
+          await claim()
+          await getClaimAmount(conn,wallet.publicKey)
+          render()
+        }}>Claim</button>
+      </div>
+      {
+        pD &&
+        <div className="col-lg-6">
+          <h4>Pool Data</h4>
+          <h5>{"Reward Mint : "+pD!.rewardMint.toBase58()}</h5>
+          <h5>{"Reward Account : "+pD!.rewardAccount.toBase58()}</h5>
+          <h5>{"Reward Amount : "+pD.rewardAmount!}</h5>
+          <h5>{"Period : "+pD.period}</h5>
+          <h5>{"Withdrawable Number: "+pD.withdrawable}</h5>
+          <h5>{"CollectionName : "+pD.stakeCollection}</h5>
+        </div>
+      }
+    </div>
+    <hr/>
 		<div className="row">
 			<div className="col-lg-6">
         <h4>Your Wallet NFT</h4>
@@ -419,6 +549,14 @@ export default function Stake(){
               <img className="card-img-top" src={nft.image} alt="Image Error"/>
               <div className="card-img-overlay">
                 <h4>{nft.name}</h4>
+                {
+                  moment().unix() > (nft.stakeTime + pD.period * pD.withdrawable) ?
+                    <button type="button" className="btn btn-success" onClick={async ()=>{
+                      await unstake(nft.stakeData)
+                    }}>Redeem</button>
+                  :
+                    <h4>nft.stakeTime</h4>
+                }
               </div>
             </div>
           })

@@ -47,6 +47,7 @@ pub mod solana_anchor {
             return Err(PoolError::InvalidPeriod.into());
         }
         pool.owner = *ctx.accounts.owner.key;
+        pool.rand = *ctx.accounts.rand.key;
         pool.reward_mint = *ctx.accounts.reward_mint.key;
         pool.reward_account = *ctx.accounts.reward_account.key;
         pool.reward_amount = _reward_amount;
