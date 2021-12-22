@@ -28,11 +28,11 @@ let wallet : any
 let conn = new Connection(clusterApiUrl('devnet'))
 let notify : any
 const { metadata: { Metadata } } = programs
-const COLLECTION_NAME = "TMDY"
+const COLLECTION_NAME = "Gorilla"
 const TOKEN_METADATA_PROGRAM_ID = new anchor.web3.PublicKey(
   "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
 )
-const programId = new PublicKey('GGmPSHAfqR5cQNVxvegoKLtyAjzEXLEzyq8f2fh4ysuq')
+const programId = new PublicKey('8vfCrbDN1oFdvXn5RTpTJCCfAHxnsw8SBD6niLeD2HDx')
 const idl = require('./solana_anchor.json')
 const confirmOption : ConfirmOptions = {
     commitment : 'finalized',
@@ -40,8 +40,8 @@ const confirmOption : ConfirmOptions = {
     skipPreflight : false
 }
 
-const REWARD_TOKEN = 'C5XF7wCq62CW1cDEha38yv3h5jxEVyCDJWmnYKGrBk9q'
-let POOL = new PublicKey('DJFzss2o2c7STHqeELp2ay8vWPo2XWv3MvWP6ogHLavm')
+const REWARD_TOKEN = 'BbPohTEym5nXZUqYXriwak45A4hLkRBjT4jDv8kVpZP1'
+let POOL = new PublicKey('5WtfUCo6rkW4NcqNfdZaMp5JNVDQWWnKVCsjSiKguaHs')
 const STAKEDATA_SIZE = 8 + 1 + 32 + 32 + 32 +8 + 1;
 const createAssociatedTokenAccountInstruction = (
   associatedTokenAddress: anchor.web3.PublicKey,
