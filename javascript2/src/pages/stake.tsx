@@ -40,8 +40,8 @@ const confirmOption : ConfirmOptions = {
     skipPreflight : false
 }
 
-const REWARD_TOKEN = 'BbPohTEym5nXZUqYXriwak45A4hLkRBjT4jDv8kVpZP1'
-let POOL = new PublicKey('5WtfUCo6rkW4NcqNfdZaMp5JNVDQWWnKVCsjSiKguaHs')
+const REWARD_TOKEN = '53W1csx5gsyjTL5VAM2jNaP5oDS3qbgLwikBeEDEVHZj'
+let POOL = new PublicKey('79RysV2dCP1FXj643RtnTGMhfCDTrtLyLB1xTSS7WvRD')
 const STAKEDATA_SIZE = 8 + 1 + 32 + 32 + 32 +8 + 1;
 const createAssociatedTokenAccountInstruction = (
   associatedTokenAddress: anchor.web3.PublicKey,
