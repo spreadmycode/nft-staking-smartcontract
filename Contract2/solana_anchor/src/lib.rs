@@ -58,6 +58,39 @@ pub mod solana_anchor {
         Ok(())
     }
 
+    pub fn update_pool(
+        ctx : Context<UpdatePool>,
+        _reward_amount : u64,
+        _period : i64,
+        _withdrawable : u8,
+        _stake_collection : String,
+        ) -> ProgramResult {
+
+        msg!("Update Pool");
+
+        let pool = &mut ctx.accounts.pool;
+        let reward_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.reward_account.data.borrow())?;
+        if reward_account.owner != pool.key() {
+            return Err(PoolError::InvalidTokenAccount.into());
+        }
+        if reward_account.mint != *ctx.accounts.reward_mint.key {
+            return Err(PoolError::InvalidTokenAccount.into());
+        }
+        if _period == 0 {
+            return Err(PoolError::InvalidPeriod.into());
+        }
+
+        pool.owner = *ctx.accounts.owner.key;
+        pool.reward_mint = *ctx.accounts.reward_mint.key;
+        pool.reward_account = *ctx.accounts.reward_account.key;
+        pool.reward_amount = _reward_amount;
+        pool.period = _period;
+        pool.withdrawable = _withdrawable;
+        pool.stake_collection = _stake_collection;
+        
+        Ok(())
+    }
+
     pub fn stake(
         ctx : Context<Stake>,
         ) -> ProgramResult {
@@ -301,6 +334,23 @@ pub struct InitPool<'info> {
     pool : ProgramAccount<'info, Pool>,
 
     rand : AccountInfo<'info>,
+
+    #[account(owner=spl_token::id())]
+    reward_mint : AccountInfo<'info>,
+
+    #[account(owner=spl_token::id())]
+    reward_account : AccountInfo<'info>,
+
+    system_program : Program<'info,System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdatePool<'info> {
+    #[account(mut, signer)]
+    owner : AccountInfo<'info>,
+
+    #[account(mut)]
+    pool : ProgramAccount<'info, Pool>,
 
     #[account(owner=spl_token::id())]
     reward_mint : AccountInfo<'info>,
