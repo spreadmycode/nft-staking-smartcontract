@@ -43,7 +43,7 @@ const confirmOption : ConfirmOptions = {
 const REWARD_TOKEN = '53W1csx5gsyjTL5VAM2jNaP5oDS3qbgLwikBeEDEVHZj';
 let POOL = new PublicKey('79RysV2dCP1FXj643RtnTGMhfCDTrtLyLB1xTSS7WvRD');
 
-const STAKEDATA_SIZE = 8 + 1 + 32 + 32 + 32 +8 + 1;
+const STAKEDATA_SIZE = 8 + 1 + 32 + 32 + 32 + 8 + 1;
 
 const createAssociatedTokenAccountInstruction = (
   associatedTokenAddress: anchor.web3.PublicKey,

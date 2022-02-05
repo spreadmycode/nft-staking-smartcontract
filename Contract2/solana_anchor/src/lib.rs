@@ -20,6 +20,7 @@ use {
         }
     }
 };
+
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 #[program]
@@ -33,10 +34,13 @@ pub mod solana_anchor {
         _period : i64,
         _withdrawable : u8,
         _stake_collection : String,
-        ) -> ProgramResult {
+    ) -> ProgramResult {
+
         msg!("Init Pool");
+
         let pool = &mut ctx.accounts.pool;
         let reward_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.reward_account.data.borrow())?;
+        
         if reward_account.owner != pool.key() {
             return Err(PoolError::InvalidTokenAccount.into());
         }
@@ -46,6 +50,7 @@ pub mod solana_anchor {
         if _period == 0 {
             return Err(PoolError::InvalidPeriod.into());
         }
+
         pool.owner = *ctx.accounts.owner.key;
         pool.rand = *ctx.accounts.rand.key;
         pool.reward_mint = *ctx.accounts.reward_mint.key;
@@ -55,6 +60,7 @@ pub mod solana_anchor {
         pool.withdrawable = _withdrawable;
         pool.stake_collection = _stake_collection;
         pool.bump = _bump;
+
         Ok(())
     }
 
@@ -64,12 +70,13 @@ pub mod solana_anchor {
         _period : i64,
         _withdrawable : u8,
         _stake_collection : String,
-        ) -> ProgramResult {
+    ) -> ProgramResult {
 
         msg!("Update Pool");
 
         let pool = &mut ctx.accounts.pool;
         let reward_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.reward_account.data.borrow())?;
+        
         if reward_account.owner != pool.key() {
             return Err(PoolError::InvalidTokenAccount.into());
         }
@@ -93,14 +100,17 @@ pub mod solana_anchor {
 
     pub fn stake(
         ctx : Context<Stake>,
-        ) -> ProgramResult {
+    ) -> ProgramResult {
+
         msg!("Stake");
+
         let pool = &ctx.accounts.pool;
         let clock = Clock::from_account_info(&ctx.accounts.clock)?;
         let source_nft_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.source_nft_account.data.borrow())?;
         let dest_nft_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.dest_nft_account.data.borrow())?;
         let nft_mint : state::Mint = state::Mint::unpack_from_slice(&ctx.accounts.nft_mint.data.borrow())?;
         let metadata : metaplex_token_metadata::state::Metadata =  metaplex_token_metadata::state::Metadata::from_account_info(&ctx.accounts.metadata)?;
+        
         if nft_mint.decimals != 0 && nft_mint.supply != 1 {
             msg!("This mint is not proper nft");
             return Err(PoolError::InvalidTokenMint.into());
@@ -136,7 +146,6 @@ pub mod solana_anchor {
             }
         )?;
 
-
         let stake_data = &mut ctx.accounts.stake_data;
         stake_data.owner = *ctx.accounts.owner.key;
         stake_data.pool = pool.key();
@@ -144,13 +153,16 @@ pub mod solana_anchor {
         stake_data.stake_time = clock.unix_timestamp;
         stake_data.withdrawn_number = 0;
         stake_data.unstaked = false;
+
         Ok(())
     }
 
     pub fn unstake(
         ctx : Context<Unstake>
-        ) -> ProgramResult {
+    ) -> ProgramResult {
+
         msg!("Unstake");
+
         let pool = &ctx.accounts.pool;
         let stake_data = &mut ctx.accounts.stake_data;
         let clock = Clock::from_account_info(&ctx.accounts.clock)?;
@@ -196,10 +208,14 @@ pub mod solana_anchor {
 
     pub fn claim(
         ctx : Context<Claim>
-        ) -> ProgramResult {
+    ) -> ProgramResult {
+
+        msg!("Unstake");
+
         let pool = &ctx.accounts.pool;
         let stake_data = &mut ctx.accounts.stake_data;
         let clock = Clock::from_account_info(&ctx.accounts.clock)?;
+
         if stake_data.owner != *ctx.accounts.owner.key {
             msg!("Not match owner");
             return Err(PoolError::InvalidStakeData.into());
@@ -209,7 +225,7 @@ pub mod solana_anchor {
             return Err(PoolError::InvalidStakeData.into());
         }
         if stake_data.withdrawn_number >= pool.withdrawable {
-            msg!("already withdrawn all");
+            msg!("Already withdrawn all");
             return Err(PoolError::InvalidTime.into());
         }
         if pool.reward_account != *ctx.accounts.source_reward_account.key {
@@ -255,18 +271,18 @@ pub struct Claim<'info> {
     #[account(mut, signer)]
     owner : AccountInfo<'info>,   
 
-    pool : ProgramAccount<'info,Pool>,
+    pool : ProgramAccount<'info, Pool>,
 
     #[account(mut)]
-    stake_data : ProgramAccount<'info,StakeData>,
+    stake_data : ProgramAccount<'info, StakeData>,
 
-    #[account(mut,owner=spl_token::id())]
+    #[account(mut,owner = spl_token::id())]
     source_reward_account : AccountInfo<'info>,
 
-    #[account(mut,owner=spl_token::id())]
+    #[account(mut,owner = spl_token::id())]
     dest_reward_account : AccountInfo<'info>,
 
-    #[account(address=spl_token::id())]
+    #[account(address = spl_token::id())]
     token_program : AccountInfo<'info>,
 
     clock : AccountInfo<'info>,     
@@ -277,18 +293,18 @@ pub struct Unstake<'info> {
     #[account(mut, signer)]
     owner : AccountInfo<'info>,   
 
-    pool : ProgramAccount<'info,Pool>,
+    pool : ProgramAccount<'info, Pool>,
 
     #[account(mut)]
-    stake_data : ProgramAccount<'info,StakeData>,
+    stake_data : ProgramAccount<'info, StakeData>,
 
-    #[account(mut,owner=spl_token::id())]
+    #[account(mut,owner = spl_token::id())]
     source_nft_account : AccountInfo<'info>,
 
-    #[account(mut,owner=spl_token::id())]
+    #[account(mut,owner = spl_token::id())]
     dest_nft_account : AccountInfo<'info>,
 
-    #[account(address=spl_token::id())]
+    #[account(address = spl_token::id())]
     token_program : AccountInfo<'info>,
 
     clock : AccountInfo<'info>,             
@@ -299,27 +315,27 @@ pub struct Stake<'info> {
     #[account(mut, signer)]
     owner : AccountInfo<'info>, 
 
-    pool : ProgramAccount<'info,Pool>,
+    pool : ProgramAccount<'info, Pool>,
 
-    #[account(init, payer=owner, space=8+STAKEDATA_SIZE)]
-    stake_data : ProgramAccount<'info,StakeData>,
+    #[account(init, payer = owner, space = 8 + STAKE_DATA_SIZE)]
+    stake_data : ProgramAccount<'info, StakeData>,
 
-    #[account(mut,owner=spl_token::id())]
+    #[account(mut, owner = spl_token::id())]
     nft_mint : AccountInfo<'info>,
 
     #[account(mut)]
     metadata : AccountInfo<'info>,
 
-    #[account(mut,owner=spl_token::id())]
+    #[account(mut, owner = spl_token::id())]
     source_nft_account : AccountInfo<'info>,
 
-    #[account(mut,owner=spl_token::id())]
+    #[account(mut, owner = spl_token::id())]
     dest_nft_account : AccountInfo<'info>,
 
-    #[account(address=spl_token::id())]
+    #[account(address = spl_token::id())]
     token_program : AccountInfo<'info>,
 
-    system_program : Program<'info,System>,
+    system_program : Program<'info, System>,
 
     clock : AccountInfo<'info>,    
 }
@@ -330,18 +346,18 @@ pub struct InitPool<'info> {
     #[account(mut, signer)]
     owner : AccountInfo<'info>,
 
-    #[account(init, seeds=[(*rand.key).as_ref()], bump=_bump, payer=owner, space=8+POOL_SIZE)]
+    #[account(init, seeds = [(*rand.key).as_ref()], bump = _bump, payer = owner, space = 8 + POOL_SIZE)]
     pool : ProgramAccount<'info, Pool>,
 
     rand : AccountInfo<'info>,
 
-    #[account(owner=spl_token::id())]
+    #[account(owner = spl_token::id())]
     reward_mint : AccountInfo<'info>,
 
-    #[account(owner=spl_token::id())]
+    #[account(owner = spl_token::id())]
     reward_account : AccountInfo<'info>,
 
-    system_program : Program<'info,System>,
+    system_program : Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -352,18 +368,17 @@ pub struct UpdatePool<'info> {
     #[account(mut)]
     pool : ProgramAccount<'info, Pool>,
 
-    #[account(owner=spl_token::id())]
+    #[account(owner = spl_token::id())]
     reward_mint : AccountInfo<'info>,
 
-    #[account(owner=spl_token::id())]
+    #[account(owner = spl_token::id())]
     reward_account : AccountInfo<'info>,
 
-    system_program : Program<'info,System>,
+    system_program : Program<'info, System>,
 }
 
 pub const POOL_SIZE : usize = 32 + 32 + 32 + 32 + 8 + 8 + 1 + 4 + MAX_SYMBOL_LENGTH + 1;
-pub const STAKEDATA_SIZE : usize = 1 + 32 + 32 + 32 + 8 + 1;
-pub const PERIOD : i64 = 24 * 60 * 60;
+pub const STAKE_DATA_SIZE : usize = 1 + 32 + 32 + 32 + 8 + 1;
 
 #[account]
 pub struct Pool {
