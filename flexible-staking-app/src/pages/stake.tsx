@@ -25,14 +25,14 @@ import {
 import axios from "axios"
 
 let wallet : any
-let conn = new Connection(clusterApiUrl('devnet'))
+let conn = new Connection("https://still-broken-voice.solana-mainnet.quiknode.pro/a0e5912096ee9f23a155f489a7c6141b99c25cdd/")
 let notify : any
 const { metadata: { Metadata } } = programs
 const COLLECTION_NAME = "Gorilla"
 const TOKEN_METADATA_PROGRAM_ID = new anchor.web3.PublicKey(
   "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
 )
-const programId = new PublicKey('8vfCrbDN1oFdvXn5RTpTJCCfAHxnsw8SBD6niLeD2HDx')
+const programId = new PublicKey('4oAmQjP5Gx5LcASUUG4m5MmexmoktWr8ZbCLSyFzHyEm')
 const idl = require('./solana_anchor.json')
 const confirmOption : ConfirmOptions = {
     commitment : 'finalized',
@@ -40,10 +40,20 @@ const confirmOption : ConfirmOptions = {
     skipPreflight : false
 }
 
-const REWARD_TOKEN = '53W1csx5gsyjTL5VAM2jNaP5oDS3qbgLwikBeEDEVHZj';
-let POOL = new PublicKey('79RysV2dCP1FXj643RtnTGMhfCDTrtLyLB1xTSS7WvRD');
+const REWARD_TOKEN = '51AA7ktYcb8yb98Tfrhs6TaDjr7cMtJVo6sEMNe87mNs';
+let POOL = new PublicKey('BpvpntVqL3bHSuDU7KKPPZ997fpzvsNBRVYL4L4kRmdc');
 
 const STAKEDATA_SIZE = 8 + 1 + 32 + 32 + 32 + 8 + 1;
+
+async function getTokenBalance(tokenAccount : PublicKey) {
+  try {
+    const amount = (await conn.getTokenAccountBalance(tokenAccount)).value.uiAmount;
+    return amount? amount : 0;
+  } catch (e) {
+    console.log(e);
+  }
+  return 0;
+}
 
 const createAssociatedTokenAccountInstruction = (
   associatedTokenAddress: anchor.web3.PublicKey,
@@ -171,6 +181,7 @@ async function initPool(
     )
   );
   await sendTransaction(transaction,[]);
+  console.log('Pool initialized', pool.toBase58());
   return pool;
 }
 
@@ -190,7 +201,7 @@ async function updatePool(
   if((await conn.getAccountInfo(rewardAccount)) == null)
     transaction.add(createAssociatedTokenAccountInstruction(rewardAccount, wallet.publicKey, pool, rewardMint))
   transaction.add(
-    await program.instruction.initPool(
+    await program.instruction.updatePool(
       new anchor.BN(rewardAmount),
       new anchor.BN(period),
       new anchor.BN(withdrawable),
@@ -394,6 +405,7 @@ async function getPoolData(
 	let provider = new anchor.Provider(conn,wallet,confirmOption);
 	const program = new anchor.Program(idl,programId,provider);
 	let poolData = await program.account.pool.fetch(POOL);
+  const tokenAmount = await getTokenBalance(poolData.rewardAccount);
 	let data = '';
 	// data += "Reward Mint : " + poolData.rewardMint.toBase58() + "\n";
 	// data += "Reward Account : " + poolData.rewardAccount.toBase58() + "\n";
@@ -407,6 +419,7 @@ async function getPoolData(
     rewardMint : poolData.rewardMint,
     rewardAccount : poolData.rewardAccount,
     rewardAmount : poolData.rewardAmount.toNumber(),
+    tokenAmount,
     period : poolData.period.toNumber(),
     withdrawable : poolData.withdrawable,
     stakeCollection : poolData.stakeCollection
@@ -460,8 +473,8 @@ export default function Stake(){
 	notify = useNotify();
 	const [changed, setChange] = useState(true);
 	const [rewardAmount, setRewardAmount] = useState(10);
-	const [period, setPeriod] = useState(60);
-	const [withdrawable, setWithdrawable] = useState(7);
+	const [period, setPeriod] = useState(60 * 60 * 24);
+	const [withdrawable, setWithdrawable] = useState(14);
 	const [collectionName, setCollectionName] = useState(COLLECTION_NAME);
 	const [rewardToken, setRewardToken] = useState(REWARD_TOKEN);
 	const render = () => {
@@ -523,7 +536,7 @@ export default function Stake(){
         <button type="button" className="btn btn-warning m-1" onClick={async () =>{
 					POOL = await updatePool(POOL, new PublicKey(rewardToken), rewardAmount, period, withdrawable, collectionName)
 					render()
-				}}>Create Staking Pool</button>
+				}}>Update Staking Pool</button>
 				<button type="button" className="btn btn-warning m-1" onClick={async () =>{
 					await getPoolData(render)
 				}}>Get Pool Data</button>
@@ -555,6 +568,7 @@ export default function Stake(){
           <h4>Pool Data</h4>
           <h5>{"Reward Mint : "+pD!.rewardMint.toBase58()}</h5>
           <h5>{"Reward Account : "+pD!.rewardAccount.toBase58()}</h5>
+          <h5>{"Token Amount : "+pD!.tokenAmount}</h5>
           <h5>{"Reward Amount : "+pD.rewardAmount!}</h5>
           <h5>{"Period : "+pD.period}</h5>
           <h5>{"Withdrawable Number: "+pD.withdrawable}</h5>
