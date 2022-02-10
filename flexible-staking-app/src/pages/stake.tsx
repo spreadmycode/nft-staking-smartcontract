@@ -43,7 +43,7 @@ const confirmOption : ConfirmOptions = {
 const REWARD_TOKEN = '51AA7ktYcb8yb98Tfrhs6TaDjr7cMtJVo6sEMNe87mNs';
 let POOL = new PublicKey('BpvpntVqL3bHSuDU7KKPPZ997fpzvsNBRVYL4L4kRmdc');
 
-const STAKEDATA_SIZE = 8 + 1 + 32 + 32 + 32 + 8 + 1;
+const STAKEDATA_SIZE = 8 + 1 + 32 + 32 + 32 + 8 + 8;
 
 async function getTokenBalance(tokenAccount : PublicKey) {
   try {

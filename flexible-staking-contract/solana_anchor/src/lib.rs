@@ -225,7 +225,7 @@ pub mod solana_anchor {
             return Err(PoolError::InvalidTokenAccount.into());
         }
 
-        let number = ((clock.unix_timestamp - stake_data.stake_time) / pool.period) as u8;
+        let number = ((clock.unix_timestamp - stake_data.stake_time) / pool.period) as u64;
         let amount = pool.reward_amount * (number - stake_data.withdrawn_number) as u64;
 
         let pool_seeds = &[
@@ -362,7 +362,7 @@ pub struct UpdatePool<'info> {
 }
 
 pub const POOL_SIZE : usize = 32 + 32 + 32 + 32 + 8 + 8 + 4 + MAX_SYMBOL_LENGTH + 1;
-pub const STAKE_DATA_SIZE : usize = 1 + 32 + 32 + 32 + 8 + 1;
+pub const STAKE_DATA_SIZE : usize = 1 + 32 + 32 + 32 + 8 + 8;
 
 #[account]
 pub struct Pool {
@@ -383,7 +383,7 @@ pub struct StakeData {
     pub pool : Pubkey,
     pub account : Pubkey,
     pub stake_time : i64,
-    pub withdrawn_number : u8,
+    pub withdrawn_number : u64,
 }
 
 #[error]
