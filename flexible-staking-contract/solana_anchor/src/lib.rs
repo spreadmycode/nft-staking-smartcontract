@@ -32,7 +32,6 @@ pub mod solana_anchor {
         _bump : u8,
         _reward_amount : u64,
         _period : i64,
-        _withdrawable : u8,
         _stake_collection : String,
     ) -> ProgramResult {
 
@@ -57,7 +56,6 @@ pub mod solana_anchor {
         pool.reward_account = *ctx.accounts.reward_account.key;
         pool.reward_amount = _reward_amount;
         pool.period = _period;
-        pool.withdrawable = _withdrawable;
         pool.stake_collection = _stake_collection;
         pool.bump = _bump;
 
@@ -68,7 +66,6 @@ pub mod solana_anchor {
         ctx : Context<UpdatePool>,
         _reward_amount : u64,
         _period : i64,
-        _withdrawable : u8,
         _stake_collection : String,
     ) -> ProgramResult {
 
@@ -92,7 +89,6 @@ pub mod solana_anchor {
         pool.reward_account = *ctx.accounts.reward_account.key;
         pool.reward_amount = _reward_amount;
         pool.period = _period;
-        pool.withdrawable = _withdrawable;
         pool.stake_collection = _stake_collection;
         
         Ok(())
@@ -165,13 +161,9 @@ pub mod solana_anchor {
 
         let pool = &ctx.accounts.pool;
         let stake_data = &mut ctx.accounts.stake_data;
-        let clock = Clock::from_account_info(&ctx.accounts.clock)?;
 
         if stake_data.unstaked {
             return Err(PoolError::AlreadyUnstaked.into());
-        }
-        if clock.unix_timestamp < stake_data.stake_time + pool.period * pool.withdrawable as i64 {
-            return Err(PoolError::InvalidTime.into());
         }
         if stake_data.owner != *ctx.accounts.owner.key {
             return Err(PoolError::InvalidStakeData.into());
@@ -224,10 +216,6 @@ pub mod solana_anchor {
             msg!("Not match pool");
             return Err(PoolError::InvalidStakeData.into());
         }
-        if stake_data.withdrawn_number >= pool.withdrawable {
-            msg!("Already withdrawn all");
-            return Err(PoolError::InvalidTime.into());
-        }
         if pool.reward_account != *ctx.accounts.source_reward_account.key {
             msg!("Source reward account must be pool's reward account");
             return Err(PoolError::InvalidTokenAccount.into());
@@ -237,11 +225,7 @@ pub mod solana_anchor {
             return Err(PoolError::InvalidTokenAccount.into());
         }
 
-        let mut number = ((clock.unix_timestamp - stake_data.stake_time) / pool.period) as u8;
-        if number > pool.withdrawable {
-            number = pool.withdrawable;
-        }
-
+        let number = ((clock.unix_timestamp - stake_data.stake_time) / pool.period) as u8;
         let amount = pool.reward_amount * (number - stake_data.withdrawn_number) as u64;
 
         let pool_seeds = &[
@@ -377,7 +361,7 @@ pub struct UpdatePool<'info> {
     system_program : Program<'info, System>,
 }
 
-pub const POOL_SIZE : usize = 32 + 32 + 32 + 32 + 8 + 8 + 1 + 4 + MAX_SYMBOL_LENGTH + 1;
+pub const POOL_SIZE : usize = 32 + 32 + 32 + 32 + 8 + 8 + 4 + MAX_SYMBOL_LENGTH + 1;
 pub const STAKE_DATA_SIZE : usize = 1 + 32 + 32 + 32 + 8 + 1;
 
 #[account]
@@ -388,7 +372,6 @@ pub struct Pool {
     pub reward_account : Pubkey,
     pub reward_amount : u64,
     pub period : i64,
-    pub withdrawable : u8,
     pub stake_collection : String,
     pub bump : u8,
 }

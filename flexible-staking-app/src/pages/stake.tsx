@@ -149,7 +149,6 @@ async function initPool(
   rewardMint : PublicKey,
   rewardAmount : number,
   period : number,
-  withdrawable : number,
   stakeCollection : string,
   ){
   console.log("+ initPool");
@@ -159,14 +158,12 @@ async function initPool(
   let [pool,bump] = await PublicKey.findProgramAddress([randomPubkey.toBuffer()],programId);
   let rewardAccount = await getTokenWallet(pool,rewardMint);
   let transaction = new Transaction();
-  let signers : Keypair[] = [];
   transaction.add(createAssociatedTokenAccountInstruction(rewardAccount,wallet.publicKey,pool,rewardMint));
   transaction.add(
     await program.instruction.initPool(
       new anchor.BN(bump),
       new anchor.BN(rewardAmount),
       new anchor.BN(period),
-      new anchor.BN(withdrawable),
       stakeCollection,
       {
         accounts:{
@@ -190,7 +187,6 @@ async function updatePool(
   rewardMint : PublicKey,
   rewardAmount : number,
   period : number,
-  withdrawable : number,
   stakeCollection : string,
   ){
   console.log("+ updatePool");
@@ -204,7 +200,6 @@ async function updatePool(
     await program.instruction.updatePool(
       new anchor.BN(rewardAmount),
       new anchor.BN(period),
-      new anchor.BN(withdrawable),
       stakeCollection,
       {
         accounts:{
@@ -300,9 +295,6 @@ async function claim(
   if((await conn.getAccountInfo(destRewardAccount)) == null)
     transaction.add(createAssociatedTokenAccountInstruction(destRewardAccount,wallet.publicKey,wallet.publicKey,pD.rewardMint))  ;
   for(let stakeAccount of resp){
-    let stakedNft = await program.account.stakeData.fetch(stakeAccount.pubkey);
-    let num = (moment().unix() - stakedNft.stakeTime.toNumber()) / pD.period;
-    if(num > pD.withdrawable) num = pD.withdrawable;
     transaction.add(
       await program.instruction.claim({
         accounts:{
@@ -406,22 +398,12 @@ async function getPoolData(
 	const program = new anchor.Program(idl,programId,provider);
 	let poolData = await program.account.pool.fetch(POOL);
   const tokenAmount = await getTokenBalance(poolData.rewardAccount);
-	let data = '';
-	// data += "Reward Mint : " + poolData.rewardMint.toBase58() + "\n";
-	// data += "Reward Account : " + poolData.rewardAccount.toBase58() + "\n";
-	// // console.log(poolData.rewardAccount.toBase58())
-	// data += "Reward Amount : " + poolData.rewardAmount.toNumber() + "\n";
-	// data += "Period : " + poolData.period.toNumber() + "s\n";
-	// data += "Withdrawable Number : " + poolData.withdrawable + "\n";
-	// data += "Collection Name : " + poolData.stakeCollection + "\n";
-	// alert(data)
   pD = {
     rewardMint : poolData.rewardMint,
     rewardAccount : poolData.rewardAccount,
     rewardAmount : poolData.rewardAmount.toNumber(),
     tokenAmount,
     period : poolData.period.toNumber(),
-    withdrawable : poolData.withdrawable,
     stakeCollection : poolData.stakeCollection
   };
   if(callback != null) callback();
@@ -445,8 +427,7 @@ async function getClaimAmount(
 
   for(let stakeAccount of resp){
     let stakedNft = await program.account.stakeData.fetch(stakeAccount.pubkey);
-    let num = (moment().unix() - stakedNft.stakeTime.toNumber()) / pD.period;
-    if(num > pD.withdrawable) num = pD.withdrawable;
+    let num = Math.floor((moment().unix() - stakedNft.stakeTime.toNumber()) / pD.period);
     claimAmount += pD.rewardAmount * (num - stakedNft.withdrawnNumber);
   }
 
@@ -474,7 +455,6 @@ export default function Stake(){
 	const [changed, setChange] = useState(true);
 	const [rewardAmount, setRewardAmount] = useState(10);
 	const [period, setPeriod] = useState(60 * 60 * 24);
-	const [withdrawable, setWithdrawable] = useState(14);
 	const [collectionName, setCollectionName] = useState(COLLECTION_NAME);
 	const [rewardToken, setRewardToken] = useState(REWARD_TOKEN);
 	const render = () => {
@@ -505,14 +485,6 @@ export default function Stake(){
 			<div className="col-lg-3">
 				<div className="input-group">
 					<div className="input-group-prepend">
-						<span className="input-group-text">Withdrawable num</span>
-					</div>
-					<input name="withdrawable"  type="number" className="form-control" onChange={(event)=>{setWithdrawable(Number(event.target.value))}} value={withdrawable}/>
-				</div>
-			</div>
-			<div className="col-lg-3">
-				<div className="input-group">
-					<div className="input-group-prepend">
 						<span className="input-group-text">Collection Name</span>
 					</div>
 					<input name="collectionName"  type="text" className="form-control" onChange={(event)=>{setCollectionName(event.target.value)}} value={collectionName}/>
@@ -530,11 +502,11 @@ export default function Stake(){
 			</div>
 			<div className="col-lg-4">
 				<button type="button" className="btn btn-warning m-1" onClick={async () =>{
-					POOL = await initPool(new PublicKey(rewardToken), rewardAmount, period, withdrawable, collectionName)
+					POOL = await initPool(new PublicKey(rewardToken), rewardAmount, period, collectionName)
 					render()
 				}}>Create Staking Pool</button>
         <button type="button" className="btn btn-warning m-1" onClick={async () =>{
-					POOL = await updatePool(POOL, new PublicKey(rewardToken), rewardAmount, period, withdrawable, collectionName)
+					POOL = await updatePool(POOL, new PublicKey(rewardToken), rewardAmount, period, collectionName)
 					render()
 				}}>Update Staking Pool</button>
 				<button type="button" className="btn btn-warning m-1" onClick={async () =>{
@@ -571,7 +543,6 @@ export default function Stake(){
           <h5>{"Token Amount : "+pD!.tokenAmount}</h5>
           <h5>{"Reward Amount : "+pD.rewardAmount!}</h5>
           <h5>{"Period : "+pD.period}</h5>
-          <h5>{"Withdrawable Number: "+pD.withdrawable}</h5>
           <h5>{"CollectionName : "+pD.stakeCollection}</h5>
         </div>
       }
@@ -605,14 +576,9 @@ export default function Stake(){
               <img className="card-img-top" src={nft.image} alt="Image Error"/>
               <div className="card-img-overlay">
                 <h4>{nft.name}</h4>
-                {
-                  moment().unix() > (nft.stakeTime + pD.period * pD.withdrawable) ?
-                    <button type="button" className="btn btn-success" onClick={async ()=>{
-                      await unstake(nft.stakeData)
-                    }}>Redeem</button>
-                  :
-                    <h4>nft.stakeTime</h4>
-                }
+                  <button type="button" className="btn btn-success" onClick={async ()=>{
+                    await unstake(nft.stakeData)
+                  }}>Redeem</button>
               </div>
             </div>
           })

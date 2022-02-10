@@ -445,7 +445,7 @@ async function getClaimAmount(
 
   for(let stakeAccount of resp){
     let stakedNft = await program.account.stakeData.fetch(stakeAccount.pubkey);
-    let num = (moment().unix() - stakedNft.stakeTime.toNumber()) / pD.period;
+    let num = Math.floor((moment().unix() - stakedNft.stakeTime.toNumber()) / pD.period);
     if(num > pD.withdrawable) num = pD.withdrawable;
     claimAmount += pD.rewardAmount * (num - stakedNft.withdrawnNumber);
   }
@@ -611,7 +611,7 @@ export default function Stake(){
                       await unstake(nft.stakeData)
                     }}>Redeem</button>
                   :
-                    <h4>nft.stakeTime</h4>
+                    <h4>{nft.stakeTime}</h4>
                 }
               </div>
             </div>
