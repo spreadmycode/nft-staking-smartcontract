@@ -280,6 +280,29 @@ async function unstake(
   await sendTransaction(transaction,[]);
 }
 
+async function withdraw(){
+  console.log("+ unstake");
+  let provider = new anchor.Provider(conn, wallet as any, confirmOption);
+  let program = new anchor.Program(idl,programId,provider);
+  await getPoolData(null);
+  let destRewardAccount = await getTokenWallet(wallet.publicKey, pD.rewardMint);
+  let transaction = new Transaction();
+  if((await conn.getAccountInfo(destRewardAccount)) == null)
+    transaction.add(createAssociatedTokenAccountInstruction(destRewardAccount,wallet.publicKey,wallet.publicKey,pD.rewardMint))  ;
+  transaction.add(
+    await program.instruction.withdraw({
+      accounts:{
+        owner : wallet.publicKey,
+        pool : POOL,
+        sourceRewardAccount : pD.rewardAccount,
+        destRewardAccount : destRewardAccount,
+        tokenProgram : TOKEN_PROGRAM_ID,
+      }
+    })
+  );
+  await sendTransaction(transaction,[]);
+}
+
 async function claim(
   ){
   console.log("+ claim");
@@ -509,6 +532,10 @@ export default function Stake(){
 					POOL = await updatePool(POOL, new PublicKey(rewardToken), rewardAmount, period, collectionName)
 					render()
 				}}>Update Staking Pool</button>
+        <button type="button" className="btn btn-warning m-1" onClick={async () =>{
+					await withdraw();
+					render()
+				}}>Withdraw</button>
 				<button type="button" className="btn btn-warning m-1" onClick={async () =>{
 					await getPoolData(render)
 				}}>Get Pool Data</button>
