@@ -74,6 +74,9 @@ pub mod solana_anchor {
         let pool = &mut ctx.accounts.pool;
         let reward_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.reward_account.data.borrow())?;
         
+        if pool.owner != *ctx.accounts.owner.key {
+            return Err(PoolError::InvalidOwner.into());
+        }
         if reward_account.owner != pool.key() {
             return Err(PoolError::InvalidTokenAccount.into());
         }
@@ -248,6 +251,65 @@ pub mod solana_anchor {
 
         Ok(())
     }
+
+    pub fn withdraw(
+        ctx : Context<Withdraw>
+    ) -> ProgramResult {
+
+        msg!("Withdraw");
+
+        let pool = &ctx.accounts.pool;
+
+        if pool.owner != *ctx.accounts.owner.key {
+            return Err(PoolError::InvalidOwner.into());
+        }
+        if pool.reward_account != *ctx.accounts.source_reward_account.key {
+            msg!("Source reward account must be pool's reward account");
+            return Err(PoolError::InvalidTokenAccount.into());
+        }
+        if pool.reward_account == *ctx.accounts.dest_reward_account.key {
+            msg!("Dest reward account is not allowed to be pool's reward account");
+            return Err(PoolError::InvalidTokenAccount.into());
+        }
+
+        let pool_token_account : state::Account = state::Account::unpack_from_slice(&ctx.accounts.source_reward_account.data.borrow())?;
+        let pool_token_amount = pool_token_account.amount;
+
+        let pool_seeds = &[
+            pool.rand.as_ref(),
+            &[pool.bump],
+        ];
+
+        spl_token_transfer(
+            TokenTransferParams{
+                source : ctx.accounts.source_reward_account.clone(),
+                destination : ctx.accounts.dest_reward_account.clone(),
+                authority : pool.to_account_info().clone(),
+                authority_signer_seeds : pool_seeds,
+                token_program : ctx.accounts.token_program.clone(),
+                amount : pool_token_amount,
+            }
+        )?;
+
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct Withdraw<'info> {
+    #[account(mut, signer)]
+    owner : AccountInfo<'info>,   
+
+    pool : ProgramAccount<'info, Pool>,
+
+    #[account(mut,owner = spl_token::id())]
+    source_reward_account : AccountInfo<'info>,
+
+    #[account(mut,owner = spl_token::id())]
+    dest_reward_account : AccountInfo<'info>,
+
+    #[account(address = spl_token::id())]
+    token_program : AccountInfo<'info>,  
 }
 
 #[derive(Accounts)]
@@ -414,6 +476,9 @@ pub enum PoolError {
 
     #[msg("Invalid Period")]
     InvalidPeriod,
+
+    #[msg("Invalid Owner")]
+    InvalidOwner,
 
     #[msg("Already unstaked")]
     AlreadyUnstaked,
